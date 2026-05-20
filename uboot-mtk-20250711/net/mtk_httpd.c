@@ -14,6 +14,7 @@
 #include <net/mtk_tcp.h>
 #include <net/mtk_httpd.h>
 #include <vsprintf.h>
+#include <log.h>
 #include <asm/global_data.h>
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -408,7 +409,7 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 
 	/* Reduce console noise for high-frequency polling endpoints */
 	if (strcmp(uri_ptr, "/console/poll"))
-		printf("%s %s\n", pdata->buf, uri_ptr);
+		debug("%s %s\n", pdata->buf, uri_ptr);
 
 	/* record URI */
 	pdata->uri = uri_ptr;
@@ -423,7 +424,7 @@ static int httpd_recv_hdr(struct httpd_instance *inst,
 				cl_ptr++;
 			pdata->payload_size = simple_strtoul(cl_ptr, NULL, 10);
 			if (strcmp(uri_ptr, "/console/poll"))
-				printf("    Content-Length: %d\n", pdata->payload_size);
+				debug("    Content-Length: %d\n", pdata->payload_size);
 		}
 
 		/* Content-Type */

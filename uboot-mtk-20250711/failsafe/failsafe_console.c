@@ -26,6 +26,9 @@ DECLARE_GLOBAL_DATA_PTR;
 
 #define WEB_CONSOLE_CMD_MAX		256
 #define WEB_CONSOLE_POLL_MAX	8192
+#define WEB_CONSOLE_EXEC_BUF_SIZE	32768
+
+bool webconsole_exec_busy;
 
 static const char *failsafe_get_prompt(void)
 {
@@ -93,6 +96,7 @@ deny:
 int failsafe_webconsole_ensure_recording(void)
 {
 	int ret;
+	struct membuf new_mb;
 
 	if (!gd)
 		return -ENODEV;
@@ -101,6 +105,34 @@ int failsafe_webconsole_ensure_recording(void)
 		ret = console_record_init();
 		if (ret)
 			return ret;
+	}
+
+	/*
+	 * The stock CONSOLE_RECORD_OUT_SIZE (0x400 = 1 KiB) is too small
+	 * for command output (e.g. "help").  Upgrade to a 32 KiB buffer so
+	 * output is not truncated.
+	 */
+	if (membuf_size((struct membuf *)&gd->console_out) <
+	    WEB_CONSOLE_EXEC_BUF_SIZE) {
+		/* Preserve any data already recorded */
+		int old_avail = membuf_avail((struct membuf *)&gd->console_out);
+		char *old_data = NULL;
+
+		if (old_avail > 0) {
+			old_data = malloc(old_avail);
+			if (old_data)
+				membuf_get((struct membuf *)&gd->console_out,
+					   old_data, old_avail);
+		}
+
+		if (!membuf_new(&new_mb, WEB_CONSOLE_EXEC_BUF_SIZE)) {
+			if (old_data) {
+				membuf_put(&new_mb, old_data, old_avail);
+				free(old_data);
+			}
+			membuf_dispose((struct membuf *)&gd->console_out);
+			gd->console_out = new_mb;
+		}
 	}
 
 	gd->flags |= GD_FLG_RECORD;
@@ -137,6 +169,17 @@ void webconsole_poll_handler(enum httpd_uri_handler_status status,
 
 	if (failsafe_webconsole_require_token(request, response))
 		return;
+
+	/*
+	 * If a command is currently executing (webconsole_exec_handler),
+	 * return an empty response so the buffer is not consumed
+	 * mid-command.
+	 */
+	if (webconsole_exec_busy) {
+		response->data = "{\"data\":\"\",\"avail\":0}\n";
+		response->size = strlen(response->data);
+		return;
+	}
 
 	ret = failsafe_webconsole_ensure_recording();
 	if (ret) {
@@ -216,6 +259,14 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 	response->info.connection_close = 1;
 	response->info.content_type = "application/json";
 
+	/* Guard against reentrancy */
+	if (webconsole_exec_busy) {
+		response->info.code = 503;
+		response->data = "{\"error\":\"busy\"}\n";
+		response->size = strlen(response->data);
+		return;
+	}
+
 	if (!request || request->method != HTTP_POST) {
 		response->info.code = 405;
 		response->data = "{\"error\":\"method\"}\n";
@@ -245,11 +296,19 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 	memset(cmd, 0, sizeof(cmd));
 	memcpy(cmd, cmdv->data, min((size_t)WEB_CONSOLE_CMD_MAX, cmdv->size));
 
+	/*
+	 * Set a busy flag so poll requests do not consume output
+	 * mid-command.  The output buffer was already enlarged to
+	 * WEB_CONSOLE_EXEC_BUF_SIZE by ensure_recording().
+	 */
+	webconsole_exec_busy = true;
+
 	/* Echo to console so browser sees what was executed */
 	{
 		const char *prompt = failsafe_get_prompt();
 		size_t plen = prompt ? strlen(prompt) : 0;
-		bool need_space = plen && prompt[plen - 1] != ' ' && prompt[plen - 1] != '\t';
+		bool need_space = plen && prompt[plen - 1] != ' ' &&
+				  prompt[plen - 1] != '\t';
 
 		if (!prompt || !prompt[0])
 			prompt = "MTK> ";
@@ -268,6 +327,8 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 		else
 			printf("%s", prompt);
 	}
+
+	webconsole_exec_busy = false;
 
 	esc_sz = strlen(cmd) * 2 + 64;
 	esc = malloc(esc_sz);
@@ -289,6 +350,7 @@ void webconsole_exec_handler(enum httpd_uri_handler_status status,
 	return;
 
 out_oom:
+	webconsole_exec_busy = false;
 	free(esc);
 	free(json);
 	response->info.code = 500;

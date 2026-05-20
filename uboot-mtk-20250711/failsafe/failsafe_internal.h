@@ -24,6 +24,7 @@ void picture_handler(enum httpd_uri_handler_status status,
 
 #ifdef CONFIG_WEBUI_FAILSAFE_CONSOLE
 int failsafe_webconsole_ensure_recording(void);
+extern bool webconsole_exec_busy;
 void webconsole_poll_handler(enum httpd_uri_handler_status status,
 	struct httpd_request *request,
 	struct httpd_response *response);
