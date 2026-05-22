@@ -1109,8 +1109,13 @@ static int do_httpd(struct cmd_tbl *cmdtp, int flag, int argc,
 	int ret;
 
 #ifdef CONFIG_NET_FORCE_IPADDR
-	net_ip = string_to_ip(CONFIG_IPADDR);
-	net_netmask = string_to_ip(CONFIG_NETMASK);
+	{
+		const char *env_ip = env_get("ipaddr");
+		const char *env_nm = env_get("netmask");
+
+		net_ip = string_to_ip((env_ip && env_ip[0]) ? env_ip : CONFIG_IPADDR);
+		net_netmask = string_to_ip((env_nm && env_nm[0]) ? env_nm : CONFIG_NETMASK);
+	}
 #endif
 	local_ip = ntohl(net_ip.s_addr);
 

@@ -460,8 +460,13 @@ int net_loop(enum proto_t protocol)
 	debug_cond(DEBUG_INT_STATE, "--- net_loop Entry\n");
 
 #ifdef CONFIG_NET_FORCE_IPADDR
-	net_ip = string_to_ip(CONFIG_IPADDR);
-	net_netmask = string_to_ip(CONFIG_NETMASK);
+	{
+		const char *env_ip = env_get("ipaddr");
+		const char *env_nm = env_get("netmask");
+
+		net_ip = string_to_ip((env_ip && env_ip[0]) ? env_ip : CONFIG_IPADDR);
+		net_netmask = string_to_ip((env_nm && env_nm[0]) ? env_nm : CONFIG_NETMASK);
+	}
 #endif
 
 #ifdef CONFIG_PHY_NCSI
