@@ -35,6 +35,8 @@ int boot_from_mtd_partition(const char *name, bool do_boot);
 
 void gen_mtd_probe_devices(void);
 
+bool mtd_nmbm_enabled(void);
+
 int ubi_mount_default(void);
 int update_ubi_volume_raw(struct ubi_volume *vol, const char *volume,
 			  int vol_id, const void *data, size_t size,

@@ -478,13 +478,13 @@ int generic_mtd_write_simg(void *priv, const struct data_part_entry *dpe,
 	uint32_t i;
 	int ret;
 
-#ifdef CONFIG_ENABLE_NAND_NMBM
-	mtd_nmbm = get_mtd_device_nm("nmbm0");
-	if (IS_ERR(mtd_nmbm))
-		mtd_nmbm = NULL;
-	else
-		put_mtd_device(mtd_nmbm);
-#endif
+	if (mtd_nmbm_enabled()) {
+		mtd_nmbm = get_mtd_device_nm("nmbm0");
+		if (IS_ERR(mtd_nmbm))
+			mtd_nmbm = NULL;
+		else
+			put_mtd_device(mtd_nmbm);
+	}
 
 	for (i = 0; i < 64; i++) {
 		mtd = get_mtd_device(NULL, i);

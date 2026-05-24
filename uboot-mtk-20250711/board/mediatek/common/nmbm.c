@@ -7,16 +7,33 @@
  * NMBM initialization routine
  */
 
+#include <env.h>
 #include <mtd.h>
 #include <linux/mtd/mtd.h>
 
 #include <nmbm/nmbm.h>
 #include <nmbm/nmbm-mtd.h>
 
+#include "mtd_helper.h"
+
 int board_nmbm_init(void)
 {
 	struct mtd_info *lower, *upper;
 	int ret;
+
+	/*
+	 * Try to load the persistent env so mtd_nmbm_enabled() below can honor
+	 * a user-saved nmbm_enable value. On boards where env lives on UBI
+	 * rooted on nmbm0 this call fails (no nmbm0 yet); the env layer falls
+	 * back to defaults and we fall back to CONFIG_ENABLE_NAND_NMBM.
+	 */
+	env_load();
+
+	if (!mtd_nmbm_enabled()) {
+		printf("\n");
+		printf("NMBM disabled by env (nmbm_enable=0)\n");
+		return 0;
+	}
 
 	printf("\n");
 	printf("Initializing NMBM ...\n");
@@ -49,6 +66,14 @@ int board_nmbm_init(void)
 	 * created immediately.
 	 */
 	mtd_probe_devices();
+
+	/*
+	 * Refresh the env now that nmbm0 (and its UBI-hosted env volume on
+	 * env-on-NMBM boards) is reachable. The hashtable is replaced
+	 * atomically with the persistent values; on env-on-non-NMBM boards
+	 * this is a harmless re-load.
+	 */
+	env_load();
 
 	return 0;
 }

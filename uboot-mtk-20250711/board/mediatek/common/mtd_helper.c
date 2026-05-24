@@ -86,6 +86,25 @@ static bool mtdparts_fixed_enabled(void)
 	return use_fixed;
 }
 
+bool mtd_nmbm_enabled(void)
+{
+	bool use_nmbm = IS_ENABLED(CONFIG_ENABLE_NAND_NMBM);
+	const char *val = env_get("nmbm_enable");
+
+	if (!val || !val[0])
+		return use_nmbm;
+
+	if (!strcmp(val, "1") || !strcasecmp(val, "true") ||
+	    !strcasecmp(val, "yes") || !strcasecmp(val, "on"))
+		return true;
+
+	if (!strcmp(val, "0") || !strcasecmp(val, "false") ||
+	    !strcasecmp(val, "no") || !strcasecmp(val, "off"))
+		return false;
+
+	return use_nmbm;
+}
+
 void gen_mtd_probe_devices(void)
 {
 	if (mtdparts_fixed_enabled()) {
