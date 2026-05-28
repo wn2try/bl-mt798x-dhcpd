@@ -573,7 +573,7 @@ const I18N = {
         "common.close": "关闭",
         "help.tooltip": "关于与帮助",
         "help.title": "关于与帮助",
-        "help.intro": "面向 MediaTek MT798x 设备的现代化 U-Boot 失效保护 Web 界面。内置 DHCP 服务器、Telnet 控制台，支持自定义主题与中英双语切换。",
+        "help.intro": "面向 MediaTek MT798x 设备的现代化 U-Boot 失效保护 Web 界面。内置 DHCP 服务器、Telnet 控制台，支持自定义主题与多语言(EN / 中文 / RU)切换。",
         "help.author": "作者",
         "help.project": "项目"
     },
