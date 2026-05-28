@@ -83,6 +83,16 @@ config WEBUI_FAILSAFE_FLASH
 
 	  WARNING: This is a dangerous feature and may brick the device.
 
+config WEBUI_FAILSAFE_GPT
+	bool "Enable GPT partition table update"
+	default y if MTK_BOOTMENU_MMC
+	depends on WEBUI_FAILSAFE && MTK_BOOTMENU_MMC
+	help
+	  Enable GPT partition table update in the failsafe Web UI.
+	  This allows update of the GPT partition table from a file upload.
+
+	  WARNING: This is a dangerous feature and may brick the device.
+
 config WEBUI_FAILSAFE_ENV
 	bool "Enable U-Boot environment management (DANGEROUS)"
 	default y

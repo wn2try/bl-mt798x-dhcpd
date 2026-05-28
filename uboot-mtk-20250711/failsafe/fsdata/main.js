@@ -11,6 +11,7 @@
 // Project/author constants (centralized for reuse)
 const AUTHOR_HANDLE = "Yuzhii0718";
 const AUTHOR_DISPLAY = "💡Yuzhii";
+const UBOOT_VERSION = 'UBOOT-MTK-20250711';
 const GITHUB_USER_URL = "https://github.com/Yuzhii0718/";
 const PROJECT_REPO_URL = "https://github.com/Yuzhii0718/bl-mt798x-dhcpd";
 
@@ -432,9 +433,36 @@ function ensureFavicon() {
         link = document.createElement("link");
         link.setAttribute("rel", "icon");
         link.setAttribute("type", "image/svg+xml");
+        link.setAttribute("href", "/favicon.svg");
         document.head?.appendChild(link);
+    } else if (link.getAttribute("href") !== "/favicon.svg") {
+        link.setAttribute("href", "/favicon.svg");
     }
-    link.setAttribute("href", "/favicon.svg");
+}
+
+const LOGO_CACHE_KEY = "failsafe_logo_dataurl";
+
+function getLogoSrc() {
+    try {
+        const cached = sessionStorage.getItem(LOGO_CACHE_KEY);
+        if (cached) return cached;
+    } catch { /* sessionStorage unavailable */ }
+
+    // Async populate cache for next page load
+    fetch("/favicon.svg")
+        .then((r) => r.ok ? r.blob() : Promise.reject())
+        .then((blob) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                if (typeof reader.result === "string" && reader.result.startsWith("data:image")) {
+                    try { sessionStorage.setItem(LOGO_CACHE_KEY, reader.result); } catch {}
+                }
+            };
+            reader.readAsDataURL(blob);
+        })
+        .catch(() => {});
+
+    return "/favicon.svg";
 }
 
 function updateDocumentTitle() {
@@ -457,13 +485,13 @@ function ensureBranding() {
     const versionNode = document.getElementById("version");
     if (!versionNode) return;
 
-    // Remove an existing sibling brand node (if present)
+    // Only remove sibling brand node if it exists (avoid DOM churn)
     const nextSibling = versionNode.nextElementSibling;
     if (nextSibling?.classList?.contains("brand")) {
         nextSibling.remove();
     }
 
-    // Ensure an inline brand label exists
+    // Ensure an inline brand label exists (check first to avoid re-creation)
     if (!versionNode.querySelector?.(".brand-inline")) {
         const brandNode = document.createElement("span");
         brandNode.className = "brand-inline";
@@ -522,7 +550,7 @@ function ensureSidebar() {
     brandContainer.className = "sidebar-brand";
     const brandLogo = document.createElement("img");
     brandLogo.className = "logo";
-    brandLogo.src = "/favicon.svg";
+    brandLogo.src = getLogoSrc();
     brandLogo.alt = "";
     brandLogo.width = 28;
     brandLogo.height = 28;
@@ -658,9 +686,10 @@ function ensureSidebar() {
     sidebar.appendChild(navContainer);
 
     applyI18n(sidebar);
-    updateGptNavVisibility();
-    updateSimgNavVisibility();
-    updateSettingsNavVisibility();
+    // Probe all Kconfig-controlled pages
+    for (const navId of Object.keys(NAV_VISIBILITY_DEFS)) {
+        updateNavVisibility(navId);
+    }
     attachSidebarScrollPersistence(navContainer);
 }
 
@@ -692,7 +721,7 @@ function ensureHelpModal() {
 
     const logo = document.createElement("img");
     logo.className = "help-modal-logo";
-    logo.src = "/favicon.svg";
+    logo.src = getLogoSrc();
     logo.alt = "";
     header.appendChild(logo);
 
@@ -892,23 +921,145 @@ function appInit(pageName) {
     pageName === "env" && typeof envInit === "function" && envInit()
     pageName === "settings" && typeof settingsInit === "function" && settingsInit();
 
-    const Yuzhii_VERSION = 'UBOOT-MTK-20250711';
-    const Yuzhii_LINK = 'https://github.com/Yuzhii0718/';
-    console.log('\n%c Yuzhii0718 ' + Yuzhii_VERSION + ' %c ' + Yuzhii_LINK + ' ', 'color: #fadfa3; background: #030307; padding:5px 0;', 'background: #fadfa3; padding:5px 0;');
+    console.log('\n%c Yuzhii0718 ' + UBOOT_VERSION + ' %c ' + GITHUB_USER_URL + ' ', 'color: #fadfa3; background: #030307; padding:5px 0;', 'background: #fadfa3; padding:5px 0;');
 }
 
-function updateGptNavVisibility() {
-    // Hide GPT update entry when no MMC is present (runtime detection).
-    // If backupinfo is unavailable, keep it hidden (fail-closed behavior).
-    const gptNavLink = document.querySelector("#sidebar [data-nav-id='gpt']");
-    if (!gptNavLink) return;
-    const mmcPresent = APP_STATE.backupinfo?.mmc?.present;
-    if (mmcPresent === undefined) {
-        gptNavLink.style.display = "none";
+/**
+ * Unified nav visibility configuration.
+ * Each entry defines how to determine if a nav link should be shown.
+ * Pages controlled by Kconfig options are probed at runtime.
+ * 
+ * Mode: "probe" - fetch the page URL to check if it exists (default)
+ *       "condition" - evaluate a condition function
+ */
+const NAV_VISIBILITY_DEFS = {
+    // Advanced features (depends on WEBUI_FAILSAFE_ADVANCED)
+    backup: {
+        url: "/backup.html",
+        logPrefix: "Backup",
+        hiddenReason: "feature not enabled in build config",
+    },
+    console: {
+        url: "/console.html",
+        logPrefix: "Console",
+        hiddenReason: "feature not enabled in build config",
+    },
+    env: {
+        url: "/env.html",
+        logPrefix: "Environment",
+        hiddenReason: "feature not enabled in build config",
+    },
+    factory: {
+        url: "/factory.html",
+        logPrefix: "Factory",
+        hiddenReason: "feature not enabled in build config",
+    },
+    flash: {
+        url: "/flash.html",
+        logPrefix: "Flash",
+        hiddenReason: "feature not enabled in build config",
+    },
+    gpt: {
+        url: "/gpt.html",
+        logPrefix: "GPT upgrade",
+        hiddenReason: "feature disabled or not an MMC device",
+    },
+    settings: {
+        url: "/settings.html",
+        logPrefix: "Settings",
+        hiddenReason: "feature not enabled in build config",
+        onHidden: ensureSidebarAccentFallback,
+    },
+    simg: {
+        url: "/simg.html",
+        logPrefix: "SIMG",
+        hiddenReason: "feature not enabled in build config",
+    },
+};
+
+/**
+ * Unified nav visibility update function.
+ * Supports two modes:
+ *   - "probe": fetch URL to check if page exists
+ *   - "condition": evaluate a condition function
+ * @param {string} navId - The data-nav-id value
+ */
+function updateNavVisibility(navId) {
+    const def = NAV_VISIBILITY_DEFS[navId];
+    if (!def) return;
+
+    const navLink = document.querySelector(`#sidebar [data-nav-id='${navId}']`);
+    if (!navLink) return;
+
+    if (def.mode === "condition") {
+        // Condition-based visibility
+        const show = def.condition();
+        navLink.style.display = show ? "" : "none";
+        console.warn(`${def.logPrefix} nav visibility: ${show ? "shown" : "hidden"}`);
         return;
     }
-    gptNavLink.style.display = mmcPresent === false ? "none" : "";
-    console.warn("GPT nav visibility updated based on MMC presence:", mmcPresent);
+
+    // Probe-based visibility (default)
+    const probeKey = `_${navId}_probe_done`;
+    const resultKey = `_${navId}_probe_result`;
+    const sessionKey = `nav_probe_${navId}`;
+
+    // Check sessionStorage first (persists across page navigations)
+    try {
+        const cached = sessionStorage.getItem(sessionKey);
+        if (cached !== null) {
+            const exists = cached === "1";
+            APP_STATE[probeKey] = true;
+            APP_STATE[resultKey] = exists;
+            navLink.style.display = exists ? "" : "none";
+            if (!exists && def.onHidden) def.onHidden();
+            return;
+        }
+    } catch { /* sessionStorage unavailable */ }
+
+    // If probe already done in this page session, use in-memory cached result
+    if (APP_STATE[probeKey]) {
+        navLink.style.display = APP_STATE[resultKey] ? "" : "none";
+        return;
+    }
+
+    // No cached result: hide and start probe
+    navLink.style.display = "none";
+    APP_STATE[probeKey] = true;
+
+    const url = def.url || `/${navId}.html`;
+    fetch(`${url}?_probe=1`, { method: "GET", cache: "no-store" })
+        .then((response) => {
+            const exists = response?.ok === true;
+            APP_STATE[resultKey] = exists;
+            navLink.style.display = exists ? "" : "none";
+            try { sessionStorage.setItem(sessionKey, exists ? "1" : "0"); } catch {}
+            if (!exists) {
+                const reason = def.hiddenReason ? ` (${def.hiddenReason})` : "";
+                console.warn(`${def.logPrefix} not available${reason}`);
+                if (def.onHidden) def.onHidden();
+            }
+        })
+        .catch(() => {
+            APP_STATE[resultKey] = false;
+            try { sessionStorage.setItem(sessionKey, "0"); } catch {}
+            const reason = def.hiddenReason ? ` (${def.hiddenReason})` : "";
+            console.warn(`${def.logPrefix} not available${reason}`);
+            if (def.onHidden) def.onHidden();
+        });
+}
+
+// Legacy wrapper functions for backward compatibility
+function updateGptNavVisibility() {
+    updateNavVisibility("gpt");
+}
+
+function updateSimgNavVisibility() {
+    updateNavVisibility("simg");
+}
+
+function updateSettingsNavVisibility() {
+    updateNavVisibility("settings");
 }
 
 function ensureSidebarAccentFallback() {
@@ -916,50 +1067,6 @@ function ensureSidebarAccentFallback() {
     if (!controlsContainer || controlsContainer.querySelector(".control-row-color")) return;
     appendAccentControls(controlsContainer);
     applyI18n(controlsContainer);
-}
-
-function updateSettingsNavVisibility() {
-    const settingsNavLink = document.querySelector("#sidebar [data-nav-id='settings']");
-    if (!settingsNavLink) return;
-
-    if (APP_STATE._settings_probe_done) return;
-    APP_STATE._settings_probe_done = true;
-
-    fetch("/settings.html?_probe=1", { method: "GET", cache: "no-store" })
-        .then((response) => {
-            if (response?.ok) {
-                settingsNavLink.style.display = "";
-                return;
-            }
-            settingsNavLink.style.display = "none";
-            ensureSidebarAccentFallback();
-        })
-        .catch(() => {
-            settingsNavLink.style.display = "none";
-            ensureSidebarAccentFallback();
-        });
-}
-
-function updateSimgNavVisibility() {
-    // Hide Single Image entry unless the page is actually served.
-    const simgNavLink = document.querySelector("#sidebar [data-nav-id='simg']");
-    if (!simgNavLink) return;
-    simgNavLink.style.display = "none";
-
-    // Avoid repeated probes.
-    if (APP_STATE._simg_probe_done) return;
-    APP_STATE._simg_probe_done = true;
-
-    fetch("/simg.html?_probe=1", { method: "GET", cache: "no-store" })
-        .then((response) => {
-            if (response?.ok) {
-                simgNavLink.style.display = "";
-                return;
-            }
-            console.warn("SIMG probe HTTP status:", response?.status ?? "unknown");
-            console.info("If SIMG feature is not enabled, this warning is expected.");
-        })
-        .catch((error) => console.warn("SIMG probe failed:", error));
 }
 
 function renderSysInfo() {
@@ -1142,7 +1249,6 @@ async function ensureSysInfoLoaded() {
 function getStorageInfoForSysinfo() {
     // Pull /backup/info to render current partition table in the sysinfo box
     if (APP_STATE.backupinfo) {
-        updateGptNavVisibility();
         return;
     }
     ajax({
@@ -1153,7 +1259,6 @@ function getStorageInfoForSysinfo() {
             } catch {
                 return;
             }
-            updateGptNavVisibility();
             renderSysInfo();
         },
     });
