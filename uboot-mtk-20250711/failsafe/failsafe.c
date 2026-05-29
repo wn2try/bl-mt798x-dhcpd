@@ -70,6 +70,21 @@ int __weak failsafe_write_image(const void *data, size_t size, failsafe_fw_t fw)
 }
 
 static bool services_auto_started;
+static bool mtk_tcp_done_flag;
+static bool eth_needs_reinit;
+
+/**
+ * failsafe_notify_network_cmd_done() - signal that a network command finished
+ *
+ * Called from telnetd after executing a network command (tftp, ping, etc.)
+ * that goes through net_loop().  The inner net_loop() calls eth_halt() on
+ * completion, so we must reinitialize the ethernet device before the next
+ * poll iteration.
+ */
+void failsafe_notify_network_cmd_done(void)
+{
+	eth_needs_reinit = true;
+}
 
 struct reboot_session {
 	bool do_reboot;
@@ -1215,8 +1230,109 @@ int start_web_failsafe(void)
 	}
 
 	failsafe_httpd_running = true;
-	net_loop(MTK_TCP);
+	mtk_tcp_done_flag = false;
+	eth_needs_reinit = false;
+	services_auto_started = false;
+
+	/*
+	 * Initialize network subsystem.  net_init() is safe to call
+	 * multiple times (only the first call allocates packet buffers).
+	 */
+	int net_ret = net_init();
+	printf("[FAILSAFE] net_init() returned %d\n", net_ret);
+	if (eth_is_on_demand_init()) {
+		eth_halt();
+		eth_set_current();
+		if (eth_init() < 0) {
+			printf("Error: failed to initialize ethernet\n");
+			failsafe_httpd_running = false;
+			return -1;
+		}
+	} else {
+		eth_init_state_only();
+	}
+	printf("[FAILSAFE] eth initialized\n");
+
+	/* Reset the MTK TCP subsystem */
+	mtk_tcp_start();
+	printf("[FAILSAFE] mtk_tcp_start() done\n");
+
+#ifdef CONFIG_MTK_DHCPD
+	/* Start the DHCP server (net_init may have cleared UDP handlers) */
+	mtk_dhcpd_start();
+	printf("[FAILSAFE] DHCP server started\n");
+#endif
+
+	/*
+	 * Non-blocking poll loop.  We call eth_rx() and
+	 * mtk_tcp_periodic_check() directly each iteration because the
+	 * weak/strong schedule_hook() override does not reliably work
+	 * across all link orders.  schedule() is still called for the
+	 * cyclic framework, watchdog, and uthread scheduling.
+	 *
+	 * The loop exits when:
+	 *   - Ctrl+C is pressed, or
+	 *   - all TCP listeners and connections are gone (mtk_tcp_done_flag).
+	 *
+	 * When telnetd runs a network command (tftp, ping, …) the inner
+	 * net_loop() halts ethernet on completion.  We detect the
+	 * eth_needs_reinit flag and call eth_init() to restart it
+	 * before the next poll.
+	 */
+	printf("[FAILSAFE] entering poll loop, done_flag=%d\n", mtk_tcp_done_flag);
+	while (!ctrlc() && !mtk_tcp_done_flag) {
+		bool need_poll = failsafe_httpd_running;
+
+#ifdef CONFIG_MTK_DHCPD
+		need_poll = need_poll || mtk_dhcpd_is_running();
+#endif
+
+		if (!services_auto_started && !failsafe_httpd_running) {
+			services_auto_started = true;
+#ifdef CONFIG_MTK_DHCPD
+			if (!mtk_dhcpd_is_running()) {
+				printf("Starting DHCP server...\n");
+				mtk_dhcpd_start();
+				need_poll = true;
+			}
+#endif
+		}
+
+		if (need_poll) {
+#if defined(CONFIG_MTK_TCP)
+			/*
+			 * Reinitialize ethernet if it was halted by an
+			 * inner net_loop() (e.g. tftp/ping executed from
+			 * the telnet console).
+			 *
+			 * net_loop() also calls net_clear_handlers() on
+			 * exit, which removes the DHCP UDP handler.  We
+			 * must re-register it after bringing ethernet back
+			 * up, otherwise DHCP requests will be silently
+			 * dropped.
+			 */
+			if (eth_needs_reinit) {
+				eth_needs_reinit = false;
+				eth_init();
+#ifdef CONFIG_MTK_DHCPD
+				/* Re-register DHCP handler cleared by net_loop() */
+				if (mtk_dhcpd_is_running())
+					mtk_dhcpd_start();
+#endif
+			}
+
+			eth_rx();
+			if (mtk_tcp_periodic_check())
+				mtk_tcp_done_flag = true;
+#endif
+		}
+
+		schedule();
+	}
+
 	failsafe_httpd_running = false;
+	mtk_tcp_close_all_conn();
+	eth_halt();
 
 	return 0;
 }
