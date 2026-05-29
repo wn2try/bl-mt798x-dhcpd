@@ -1177,6 +1177,7 @@ int start_web_failsafe(void)
 	httpd_register_uri_handler(inst, "/console/clear", &webconsole_clear_handler, NULL);
 #endif
 
+#ifdef CONFIG_MTK_TELNETD
 	if (IS_ENABLED(CONFIG_MTK_TELNETD)) {
 		const char *enable_str = env_get("telnet_enable");
 		const char *port_str = env_get("telnet_port");
@@ -1200,6 +1201,7 @@ int start_web_failsafe(void)
 			mtk_telnetd_start((u16)port);
 		}
 	}
+#endif
 
 	{
 		u32 ip = ntohl(net_ip.s_addr);

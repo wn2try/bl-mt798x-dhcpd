@@ -244,7 +244,7 @@ config MTK_HTTPD
 
 config MTK_TELNETD
 	bool "Minimal telnet server for MediaTek web failsafe"
-	default y
+	default n
 	depends on MTK_TCP
 	select CONSOLE_RECORD
 	help
