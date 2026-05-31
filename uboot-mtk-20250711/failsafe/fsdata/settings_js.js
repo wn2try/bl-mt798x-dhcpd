@@ -17,8 +17,10 @@
     const MTD_SELECT_ID = "set_mtd_layout";
     const MTD_CUSTOM_ROW_ID = "set_mtd_custom_row";
     const MTD_CUSTOM_LABEL = "custom";
+    const MTD_CUSTOM_ENV = "mtd_layout_custom";
 
     let lastEnvSnapshot = {};
+    let hasMtdCustomLayout = false;
 
     function setStatus(message) {
         const el = document.getElementById(SETTINGS_STATUS_ID);
@@ -61,14 +63,13 @@
         const select = document.getElementById(MTD_SELECT_ID);
         const row = document.getElementById(MTD_CUSTOM_ROW_ID);
         if (!select || !row) return;
-        row.style.display = select.value === MTD_CUSTOM_LABEL ? "" : "none";
+        row.style.display = "";
     }
 
     function bindMtdLayoutChange() {
         const select = document.getElementById(MTD_SELECT_ID);
         if (!select || select.dataset.mtdbound === "1") return;
         select.dataset.mtdbound = "1";
-        select.addEventListener("change", syncMtdCustomVisibility);
     }
 
     async function populateMtdLayouts() {
@@ -97,8 +98,8 @@
         blank.textContent = t("settings.value.default", "Default");
         select.appendChild(blank);
 
-        const labels = parts.slice(1).filter((s) => s.length > 0);
-        if (!labels.includes(MTD_CUSTOM_LABEL))
+        const labels = parts.slice(1).filter((s) => s.length > 0 && s !== MTD_CUSTOM_LABEL);
+        if (hasMtdCustomLayout && !labels.includes(MTD_CUSTOM_LABEL))
             labels.push(MTD_CUSTOM_LABEL);
 
         for (const name of labels) {
@@ -210,7 +211,10 @@
             }
             const text = await response.text();
             const envMap = parseEnvList(text);
+            hasMtdCustomLayout = Object.prototype.hasOwnProperty.call(envMap, MTD_CUSTOM_ENV) &&
+                (envMap[MTD_CUSTOM_ENV] || "").trim() !== "";
             applyCurrentValues(envMap);
+            await populateMtdLayouts();
             lastEnvSnapshot = snapshotCurrentValues();
             syncMtdCustomVisibility();
             setStatus(t("env.status.ready", "Ready."));
@@ -287,7 +291,6 @@
         bindDarkVariantControl();
         bindNetworkSync();
         bindMtdLayoutChange();
-        populateMtdLayouts();
         refresh();
     }
 
