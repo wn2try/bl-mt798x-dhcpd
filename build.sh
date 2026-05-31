@@ -5,6 +5,12 @@ AUTHOR="Yuzhii"
 TOOLCHAIN_ARM=arm-linux-gnueabi-
 TOOLCHAIN_AARCH64=aarch64-linux-gnu-
 
+# ATF directory and uboot directory names
+ATF24=atf-20240117-bacca82a8
+ATF25=atf-20250711
+ATF26=atf-20260123
+UBOOT25=uboot-mtk-20250711
+
 # Default selection
 VERSION=${VERSION:-2025}
 VARIANT=${VARIANT:-default}
@@ -17,16 +23,16 @@ TELNETD=${TELNETD:-0}
 COPY_BL2=${COPY_BL2:-1}
 
 if [ "$VERSION" = "2025" ]; then
-    UBOOT_DIR=uboot-mtk-20250711
-    ATF_DIR=atf-20250711
+    UBOOT_DIR=$UBOOT25
+    ATF_DIR=$ATF25
 elif [ "$VERSION" = "SP1" ] || [ "$VERSION" = "sp1" ]; then
 	VERSION="SP1"
-    UBOOT_DIR=uboot-mtk-20250711
-    ATF_DIR=atf-20240117-bacca82a8
+    UBOOT_DIR=$UBOOT25
+    ATF_DIR=$ATF24
 elif [ "$VERSION" = "SP2" ] || [ "$VERSION" = "sp2" ]; then
 	VERSION="SP2"
-    UBOOT_DIR=uboot-mtk-20250711
-    ATF_DIR=atf-20260123
+    UBOOT_DIR=$UBOOT25
+    ATF_DIR=$ATF26
 else
 	echo "Error: Unsupported VERSION. Please specify VERSION=2025/SP1/SP2."
     exit 1
