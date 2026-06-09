@@ -184,7 +184,7 @@ $(obj)/.min/%.svg.gz: $(src)/%.svg $(WEBUI_FAILSAFE_GZIP_SCRIPT) FORCE
 $(obj)/%.o: $(obj)/.min/%.html.gz FORCE
 	$(call if_changed_dep,as_o_html)
 
-$(obj)/style.o: $(obj)/.min/style.css.gz FORCE
+$(obj)/%.o: $(obj)/.min/%.css.gz FORCE
 	$(call if_changed_dep,as_o_html)
 
 $(obj)/%.o: $(obj)/.min/%.js.gz FORCE
